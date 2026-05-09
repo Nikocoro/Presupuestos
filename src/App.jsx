@@ -24,9 +24,8 @@ async function detectBudgetItems(text) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ text }),
   })
-  if (!res.ok) throw new Error(`Error del servidor: ${res.status}`)
   const data = await res.json()
-  if (data.error) throw new Error(data.error)
+  if (!res.ok || data.error) throw new Error(data.error || `Error del servidor: ${res.status}`)
   return data.items
 }
 
