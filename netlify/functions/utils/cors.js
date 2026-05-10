@@ -5,9 +5,34 @@ const HEADERS = {
   'Content-Type': 'application/json',
 }
 
-function ok(body) { return { statusCode: 200, headers: HEADERS, body: JSON.stringify(body) } }
-function created(body) { return { statusCode: 201, headers: HEADERS, body: JSON.stringify(body) } }
-function err(code, msg) { return { statusCode: code, headers: HEADERS, body: JSON.stringify({ error: msg }) } }
-function preflight() { return { statusCode: 200, headers: HEADERS, body: '' } }
+export function ok(body) {
+  return {
+    statusCode: 200,
+    headers: HEADERS,
+    body: JSON.stringify(body),
+  }
+}
 
-module.exports = { ok, created, err, preflight }
+export function created(body) {
+  return {
+    statusCode: 201,
+    headers: HEADERS,
+    body: JSON.stringify(body),
+  }
+}
+
+export function err(code, msg) {
+  return {
+    statusCode: code,
+    headers: HEADERS,
+    body: JSON.stringify({ error: msg }),
+  }
+}
+
+export function preflight() {
+  return {
+    statusCode: 200,
+    headers: HEADERS,
+    body: '',
+  }
+}

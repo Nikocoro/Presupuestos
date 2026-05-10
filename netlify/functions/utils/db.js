@@ -1,14 +1,16 @@
-const { MongoClient } = require('mongodb')
+import { MongoClient } from 'mongodb'
 
 let cachedClient = null
 
-async function getDb() {
+export async function getDb() {
   if (!cachedClient) {
-    if (!process.env.MONGODB_URI) throw new Error('MONGODB_URI no configurada en Netlify.')
+    if (!process.env.MONGODB_URI) {
+      throw new Error('MONGODB_URI no configurada en Netlify.')
+    }
+
     cachedClient = new MongoClient(process.env.MONGODB_URI)
     await cachedClient.connect()
   }
-  return cachedClient.db('cotizador')
-}
 
-module.exports = getDb
+  return cachedClient.db(process.env.MONGODB_DB || 'cotizador')
+}

@@ -1,8 +1,9 @@
-const getDb = require('./utils/db')
-const { ok, created, err, preflight } = require('./utils/cors')
+import { getDb } from './utils/db.js'
+import { ok, created, err, preflight } from './utils/cors.js'
 
-exports.handler = async (event) => {
+export const handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') return preflight()
+
   try {
     const db = await getDb()
     const col = db.collection('items')
@@ -20,6 +21,7 @@ exports.handler = async (event) => {
 
     if (event.httpMethod === 'PUT') {
       const { id, ...fields } = JSON.parse(event.body)
+      if (!id) return err(400, 'Falta el campo id')
       await col.updateOne({ id }, { $set: fields })
       return ok({ updated: true })
     }
@@ -33,7 +35,7 @@ exports.handler = async (event) => {
 
     return err(405, 'Método no permitido')
   } catch (e) {
-    console.error('[items]', e.message)
+    console.error('[items]', e)
     return err(500, e.message)
   }
 }
