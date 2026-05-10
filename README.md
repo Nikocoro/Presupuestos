@@ -6,7 +6,7 @@ App web para detectar ítems a presupuestar desde PDFs y registrar los presupues
 
 - **Frontend**: React + Vite
 - **PDF**: pdfjs-dist
-- **IA**: Claude claude-sonnet-4-20250514 (vía Netlify Function)
+- **IA**: gemini-2.5-flash-lite (vía Netlify Function)
 - **Deploy**: Netlify
 
 ## Setup local
@@ -60,7 +60,7 @@ cotizador/
 │   └── index.css        # Estilos globales + CSS vars (light/dark)
 ├── netlify/
 │   └── functions/
-│       └── analyze.js   # Proxy seguro a la API de Claude
+│       └── analyze.js   # Proxy seguro a la API de Gemini
 ├── index.html
 ├── vite.config.js
 ├── netlify.toml
@@ -72,9 +72,8 @@ cotizador/
 1. El usuario sube un PDF
 2. pdfjs-dist extrae el texto en el browser
 3. El texto se envía a `/.netlify/functions/analyze`
-4. La Function llama a Claude con la API key segura (variable de entorno)
-5. Claude devuelve un JSON con los ítems detectados
+4. La Function llama a Gemini con la API key segura (variable de entorno)
+5. Gemini devuelve un JSON con los ítems detectados
 6. El usuario revisa, edita y confirma los ítems
 7. Carga los presupuestos con descripción, precio y proveedor
 8. Todo se persiste en localStorage
-
