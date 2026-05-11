@@ -42,7 +42,7 @@ const btnSolid = (color) => ({ padding: '8px 16px', background: `var(--bg-${colo
 const STEPS = [
   { id: 1, label: 'Analizar PDF', desc: 'Subí el PDF con los ítems' },
   { id: 2, label: 'Ítems a buscar', desc: 'Revisá y describí cada ítem' },
-  { id: 3, label: 'Presupuestos', desc: 'Registrá los precios encontrados' },
+  { id: 3, label: 'Presupuestos', desc: 'Opcional: registrá precios' },
 ]
 const PROFESIONES_LISTA = ['Gasista', 'Plomero', 'Electricista', 'Albañil', 'Carpintero', 'Pintor', 'Cerrajero', 'Techista', 'Herrero', 'Jardinero']
 
@@ -184,7 +184,7 @@ function StepItems({ items, setItems, onConfirm }) {
           )}
         </div>
       ))}
-      {items.length > 0 && <button onClick={onConfirm} style={{ ...btnSolid('info'), width: '100%', justifyContent: 'center', marginTop: 8, padding: 10 }}><i className="ti ti-circle-check" /> Confirmar ítems y cargar presupuestos</button>}
+      {items.length > 0 && <button onClick={onConfirm} style={{ ...btnSolid('info'), width: '100%', justifyContent: 'center', marginTop: 8, padding: 10 }}><i className="ti ti-circle-check" /> Confirmar ítems</button>}
     </div>
   )
 }
@@ -242,7 +242,7 @@ function StepQuotes({ items, quotes, setQuotes, onFinishQuotes }) {
     <div style={{ display: 'grid', gridTemplateColumns: 'var(--quote-grid)', gap: 16 }}>
       <div style={card}>
         <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-primary)', marginBottom: 4 }}>Cargar presupuesto</div>
-        <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 4 }}>Al guardar, pasa automáticamente al siguiente ítem pendiente</div>
+        <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 4 }}>Opcional: podés cargar uno o más presupuestos y volver cuando quieras</div>
         <label style={lbl}>Ítem</label>
         <select value={form.itemId} onChange={(e) => { setCompleteMessage(''); setForm((f) => ({ ...f, itemId: e.target.value })) }} style={{ width: '100%' }}>
           <option value="">— Seleccioná un ítem —</option>
@@ -295,7 +295,7 @@ function StepQuotes({ items, quotes, setQuotes, onFinishQuotes }) {
 }
 
 // ── Vista General ─────────────────────────────────────────────────────────────
-function ViewResumen({ items, quotes, setQuotes, onGoToStep }) {
+function ViewResumen({ items, setItems, quotes, setQuotes, onGoToStep }) {
   const [filterItemId, setFilterItemId] = useState('todos')
   const [sortDir, setSortDir] = useState('asc')
   const [editingQuoteId, setEditingQuoteId] = useState(null)
@@ -312,6 +312,17 @@ function ViewResumen({ items, quotes, setQuotes, onGoToStep }) {
 
   const handleDeleteQuote = async (id) => {
     try { await deleteQuote(id); setQuotes((prev) => prev.filter((x) => x.id !== id)) } catch (e) { console.error(e) }
+  }
+
+  const handleDeleteItem = async (itemId) => {
+    const relatedQuotes = quotes.filter((q) => q.itemId === itemId)
+    try {
+      await deleteItem(itemId)
+      await Promise.all(relatedQuotes.map((q) => deleteQuote(q.id)))
+      setItems((prev) => prev.filter((it) => it.id !== itemId))
+      setQuotes((prev) => prev.filter((q) => q.itemId !== itemId))
+      if (filterItemId === itemId) setFilterItemId('todos')
+    } catch (e) { console.error(e) }
   }
 
   const startEditQuote = (q) => {
@@ -336,16 +347,21 @@ function ViewResumen({ items, quotes, setQuotes, onGoToStep }) {
       <div style={card}>
         <div className="mobile-stack" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 14 }}>
           <div><div style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-primary)' }}>Ítems a presupuestar</div><div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 2 }}>{items.length} ítems · {itemsWithQuotes.length} con presupuesto · {itemsSinQuotes.length} pendientes</div></div>
-          <button onClick={() => onGoToStep(3)} style={{ fontSize: 12, padding: '5px 12px', background: 'var(--bg-info)', color: 'var(--text-info)', border: '0.5px solid var(--border-info)', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}><i className="ti ti-plus" /> Cargar nuevo presupuesto</button>
+          <div className="mobile-actions" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}><button onClick={() => onGoToStep(1)} style={{ fontSize: 12, padding: '5px 12px', background: 'var(--bg-secondary)', color: 'var(--text-secondary)', border: '0.5px solid var(--border)', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}><i className="ti ti-file-upload" /> Nueva carga</button><button onClick={() => onGoToStep(3)} style={{ fontSize: 12, padding: '5px 12px', background: 'var(--bg-info)', color: 'var(--text-info)', border: '0.5px solid var(--border-info)', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}><i className="ti ti-plus" /> Cargar presupuesto</button></div>
         </div>
         {items.length === 0
           ? <div style={{ padding: 20, textAlign: 'center', color: 'var(--text-tertiary)', fontSize: 13, background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)' }}>No hay ítems cargados aún. <span style={{ color: 'var(--text-info)', cursor: 'pointer' }} onClick={() => onGoToStep(1)}>Subí un PDF</span> para empezar.</div>
           : <div style={{ display: 'grid', gridTemplateColumns: 'var(--summary-items-grid)', gap: 8 }}>
             {items.map((it) => { const qty = quotes.filter((q) => q.itemId === it.id).length; return (
               <div key={it.id} onClick={() => setFilterItemId(it.id)} style={{ padding: '10px 12px', border: `0.5px solid ${filterItemId === it.id ? 'var(--border-info)' : 'var(--border)'}`, borderRadius: 'var(--radius-md)', cursor: 'pointer', background: filterItemId === it.id ? 'var(--bg-info)' : 'var(--bg-secondary)' }}>
-                <div style={{ fontSize: 13, fontWeight: 500, color: filterItemId === it.id ? 'var(--text-info)' : 'var(--text-primary)', marginBottom: 3 }}>{it.item}</div>
-                {it.descripcion && <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginBottom: 3 }}>{it.descripcion}</div>}
-                <div style={{ fontSize: 11, color: qty > 0 ? 'var(--text-success)' : 'var(--text-warning)' }}>{qty > 0 ? <><i className="ti ti-check" /> {qty} presupuesto{qty > 1 ? 's' : ''}</> : <><i className="ti ti-clock" /> Pendiente</>}</div>
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 500, color: filterItemId === it.id ? 'var(--text-info)' : 'var(--text-primary)', marginBottom: 3 }}>{it.item}</div>
+                    {it.descripcion && <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginBottom: 3 }}>{it.descripcion}</div>}
+                  </div>
+                  <button title="Eliminar ítem" onClick={(e) => { e.stopPropagation(); handleDeleteItem(it.id) }} style={{ background: 'none', border: 'none', color: 'var(--text-danger)', cursor: 'pointer', padding: '2px 4px', fontSize: 14, flexShrink: 0 }}><i className="ti ti-trash" /></button>
+                </div>
+                <div style={{ fontSize: 11, color: qty > 0 ? 'var(--text-success)' : 'var(--text-warning)' }}>{qty > 0 ? <><i className="ti ti-check" /> {qty} presupuesto{qty > 1 ? 's' : ''}</> : <><i className="ti ti-circle" /> Sin presupuesto</>}</div>
               </div>
             )})}
           </div>}
@@ -525,7 +541,7 @@ export default function App() {
       try {
         const [i, q, p] = await Promise.all([loadItems(), loadQuotes(), loadProfesionales()])
         setItems(i); setQuotes(q); setProfesionales(p)
-        if (i.length > 0) setStep(2)
+        if (i.length > 0) { setView('resumen'); setStep(1) }
       } catch (e) {
         setDbError('No se pudo conectar a la base de datos. Usando datos locales.')
         console.error(e)
@@ -607,14 +623,14 @@ export default function App() {
             {step === 1 && <StepUpload onItemsDetected={async (detected) => {
               try {
                 const saved = await Promise.all(detected.map((it) => addItem(it)))
-                setItems(saved); setStep(2)
+                setItems((prev) => [...prev, ...saved]); setStep(2)
               } catch (e) { setItems(detected); setStep(2) }
             }} />}
-            {step === 2 && <StepItems items={items} setItems={setItems} onConfirm={() => setStep(3)} />}
+            {step === 2 && <StepItems items={items} setItems={setItems} onConfirm={() => { setStep(1); setView('resumen') }} />}
             {step === 3 && <StepQuotes items={items} quotes={quotes} setQuotes={setQuotes} onFinishQuotes={() => setView('resumen')} />}
           </>
         )}
-        {view === 'resumen' && <ViewResumen items={items} quotes={quotes} setQuotes={setQuotes} onGoToStep={goToStep} />}
+        {view === 'resumen' && <ViewResumen items={items} setItems={setItems} quotes={quotes} setQuotes={setQuotes} onGoToStep={goToStep} />}
         {view === 'profesionales' && <ViewProfesionales profesionales={profesionales} setProfesionales={setProfesionales} />}
       </div>
     </div>
