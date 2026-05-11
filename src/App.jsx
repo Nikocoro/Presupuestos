@@ -56,7 +56,7 @@ function Spinner({ text }) {
 }
 
 // ── Step 1 ───────────────────────────────────────────────────────────────────
-function StepUpload({ onItemsDetected }) {
+function StepUpload({ onItemsDetected, onManualStart }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [fileName, setFileName] = useState('')
@@ -84,6 +84,11 @@ function StepUpload({ onItemsDetected }) {
         {loading ? <><i className="ti ti-loader-2 spinning" style={{ fontSize: 36, color: 'var(--text-info)' }} /><div style={{ fontSize: 14, color: 'var(--text-secondary)' }}>Analizando con IA...</div><div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>{fileName}</div></>
           : <><i className="ti ti-file-upload" style={{ fontSize: 36, color: 'var(--text-tertiary)' }} /><div style={{ fontSize: 14, color: 'var(--text-secondary)' }}>Arrastrá tu PDF acá o <span style={{ color: 'var(--text-info)', textDecoration: 'underline' }}>hacé click para elegir</span></div><div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>Solo archivos PDF · máx 20 MB</div></>}
       </div>
+      <div style={{ marginTop: 12, display: 'flex', justifyContent: 'center' }}>
+        <button type="button" onClick={onManualStart} disabled={loading} style={{ fontSize: 13, padding: '8px 14px', background: 'var(--bg-secondary)', color: 'var(--text-secondary)', border: '0.5px solid var(--border-md)', borderRadius: 'var(--radius-md)', cursor: loading ? 'not-allowed' : 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          <i className="ti ti-plus" /> Cargar ítem manualmente
+        </button>
+      </div>
       {error && <div style={{ marginTop: 12, padding: '8px 12px', background: 'var(--bg-danger)', color: 'var(--text-danger)', borderRadius: 'var(--radius-md)', fontSize: 13, display: 'flex', alignItems: 'center', gap: 8 }}><i className="ti ti-alert-circle" /> {error}</div>}
       <div style={{ marginTop: 12, background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)', padding: 14, display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-tertiary)', fontSize: 13 }}>
         <i className="ti ti-sparkles" style={{ fontSize: 16, flexShrink: 0 }} /> Los ítems detectados aparecerán en el paso 2 para revisarlos y agregar detalles
@@ -94,7 +99,7 @@ function StepUpload({ onItemsDetected }) {
 }
 
 // ── Step 2 ───────────────────────────────────────────────────────────────────
-function StepItems({ items, setItems, onConfirm }) {
+function StepItems({ items, setItems, setAllItems, onConfirm }) {
   const [editingId, setEditingId] = useState(null)
   const [editForm, setEditForm] = useState({ item: '', descripcion: '' })
   const [saving, setSaving] = useState(false)
@@ -108,6 +113,7 @@ function StepItems({ items, setItems, onConfirm }) {
       const updated = { id, item: editForm.item.trim(), descripcion: editForm.descripcion.trim() }
       await updateItem(updated)
       setItems((prev) => prev.map((it) => it.id === id ? { ...it, ...updated } : it))
+      setAllItems((prev) => prev.map((it) => it.id === id ? { ...it, ...updated } : it))
       setEditingId(null)
     } catch (e) { console.error(e) }
     finally { setSaving(false) }
@@ -119,6 +125,7 @@ function StepItems({ items, setItems, onConfirm }) {
     try {
       const saved = await addItem(newItem)
       setItems((prev) => [...prev, saved])
+      setAllItems((prev) => [...prev, saved])
       setEditingId(saved.id); setEditForm({ item: '', descripcion: '' })
     } catch (e) { console.error(e) }
     finally { setSaving(false) }
@@ -128,6 +135,7 @@ function StepItems({ items, setItems, onConfirm }) {
     try {
       await deleteItem(id)
       setItems((prev) => prev.filter((it) => it.id !== id))
+      setAllItems((prev) => prev.filter((it) => it.id !== id))
     } catch (e) { console.error(e) }
   }
 
@@ -531,6 +539,7 @@ export default function App() {
   const [view, setView] = useState('workflow')
   const [step, setStep] = useState(1)
   const [items, setItems] = useState([])
+  const [draftItems, setDraftItems] = useState([])
   const [quotes, setQuotes] = useState([])
   const [profesionales, setProfesionales] = useState([])
   const [initializing, setInitializing] = useState(true)
@@ -551,7 +560,11 @@ export default function App() {
     })()
   }, [])
 
-  const goToStep = (s) => { setView('workflow'); setStep(s) }
+  const goToStep = (s) => {
+    if (s === 1) setDraftItems([])
+    setView('workflow')
+    setStep(s)
+  }
 
   const navBtn = (targetView, icon, label, count) => {
     const active = view === targetView
@@ -594,7 +607,7 @@ export default function App() {
       {view === 'workflow' && (
         <div className="step-scroll" style={{ background: 'var(--bg-primary)', borderBottom: '0.5px solid var(--border)', display: 'flex' }}>
           {STEPS.map((s) => {
-            const st = stepStatus(s.id); const canClick = items.length > 0 || s.id === 1
+            const st = stepStatus(s.id); const canClick = s.id === 1 || s.id === 2 || items.length > 0
             return (
               <button key={s.id} onClick={() => canClick && setStep(s.id)} style={{ flex: 1, minWidth: 'var(--step-min-width)', padding: '13px 12px', display: 'flex', alignItems: 'center', gap: 10, background: 'none', border: 'none', borderBottom: `2px solid ${st === 'active' ? '#378ADD' : st === 'done' ? '#1D9E75' : 'transparent'}`, cursor: canClick ? 'pointer' : 'default' }}>
                 <div style={{ width: 26, height: 26, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 500, flexShrink: 0, background: st === 'active' ? 'var(--bg-info)' : st === 'done' ? 'var(--bg-success)' : 'var(--bg-secondary)', color: st === 'active' ? 'var(--text-info)' : st === 'done' ? 'var(--text-success)' : 'var(--text-tertiary)' }}>
@@ -620,13 +633,22 @@ export default function App() {
       <div style={{ padding: 'var(--page-padding)', maxWidth: 1080, margin: '0 auto' }}>
         {view === 'workflow' && (
           <>
-            {step === 1 && <StepUpload onItemsDetected={async (detected) => {
-              try {
-                const saved = await Promise.all(detected.map((it) => addItem(it)))
-                setItems((prev) => [...prev, ...saved]); setStep(2)
-              } catch (e) { setItems(detected); setStep(2) }
-            }} />}
-            {step === 2 && <StepItems items={items} setItems={setItems} onConfirm={() => { setStep(1); setView('resumen') }} />}
+            {step === 1 && <StepUpload
+              onManualStart={() => { setDraftItems([]); setStep(2) }}
+              onItemsDetected={async (detected) => {
+                try {
+                  const saved = await Promise.all(detected.map((it) => addItem(it)))
+                  setItems((prev) => [...prev, ...saved])
+                  setDraftItems(saved)
+                  setStep(2)
+                } catch (e) {
+                  setItems((prev) => [...prev, ...detected])
+                  setDraftItems(detected)
+                  setStep(2)
+                }
+              }}
+            />}
+            {step === 2 && <StepItems items={draftItems} setItems={setDraftItems} setAllItems={setItems} onConfirm={() => { setDraftItems([]); setStep(1); setView('resumen') }} />}
             {step === 3 && <StepQuotes items={items} quotes={quotes} setQuotes={setQuotes} onFinishQuotes={() => setView('resumen')} />}
           </>
         )}
