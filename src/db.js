@@ -65,6 +65,15 @@ export async function addQuote(quote) {
   })
 }
 
+
+export async function updateQuote(quote) {
+  await apiFetch('/.netlify/functions/quotes', {
+    method: 'PUT',
+    body: JSON.stringify(quote),
+  })
+  return quote
+}
+
 export async function deleteQuote(id) {
   await apiFetch(`/.netlify/functions/quotes?id=${id}`, { method: 'DELETE' })
 }

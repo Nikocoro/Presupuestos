@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import * as pdfjsLib from 'pdfjs-dist'
 import {
   loadItems, addItem, updateItem, deleteItem,
-  loadQuotes, addQuote, deleteQuote,
+  loadQuotes, addQuote, updateQuote, deleteQuote,
   loadProfesionales, addProfesional, deleteProfesional,
 } from './db.js'
 
@@ -190,43 +190,61 @@ function StepItems({ items, setItems, onConfirm }) {
 }
 
 // ── Step 3 ───────────────────────────────────────────────────────────────────
-function StepQuotes({ items, quotes, setQuotes }) {
+function StepQuotes({ items, quotes, setQuotes, onFinishQuotes }) {
   const empty = { itemId: '', desc: '', price: '', source: '' }
   const [form, setForm] = useState(empty)
   const [formError, setFormError] = useState('')
+  const [completeMessage, setCompleteMessage] = useState('')
   const [saving, setSaving] = useState(false)
 
   const getItem = (id) => items.find((it) => it.id === id)
-  const quotesForItem = (id) => quotes.filter((q) => q.itemId === id)
+  const quotesForItem = (id, list = quotes) => list.filter((q) => q.itemId === id)
   const itemsSinCotizar = items.filter((it) => quotesForItem(it.id).length === 0)
   const itemsCotizados = items.filter((it) => quotesForItem(it.id).length > 0)
 
-  useEffect(() => { if (!form.itemId && itemsSinCotizar.length > 0) setForm((f) => ({ ...f, itemId: itemsSinCotizar[0].id })) }, [itemsSinCotizar.length])
+  useEffect(() => {
+    if (!form.itemId && itemsSinCotizar.length > 0) {
+      setForm((f) => ({ ...f, itemId: itemsSinCotizar[0].id }))
+    }
+  }, [itemsSinCotizar.length, form.itemId])
+
+  const resetQuoteForm = (nextItemId = '') => {
+    setForm({ ...empty, itemId: nextItemId })
+    setFormError('')
+  }
 
   const handleSubmit = async () => {
     if (!form.itemId) { setFormError('Seleccioná un ítem.'); return }
     if (!form.price) { setFormError('Ingresá el precio.'); return }
-    setFormError(''); setSaving(true)
+    setFormError(''); setCompleteMessage(''); setSaving(true)
     try {
       const quote = { id: `q-${Date.now()}`, ...form }
       const saved = await addQuote(quote)
-      setQuotes((prev) => [...prev, saved])
-      setForm({ ...empty, itemId: form.itemId })
+      const nextQuotes = [...quotes, saved]
+      setQuotes(nextQuotes)
+
+      const remaining = items.filter((it) => !nextQuotes.some((q) => q.itemId === it.id))
+      if (remaining.length > 0) {
+        resetQuoteForm(remaining[0].id)
+      } else {
+        resetQuoteForm('')
+        setCompleteMessage('Listo: ya cargaste al menos un presupuesto para todos los ítems. La carga se reinició para evitar seguir editando la tanda anterior.')
+      }
     } catch (e) { setFormError(e.message) }
     finally { setSaving(false) }
   }
 
   const handleDelete = async (id) => {
-    try { await deleteQuote(id); setQuotes((prev) => prev.filter((x) => x.id !== id)) } catch (e) { console.error(e) }
+    try { await deleteQuote(id); setQuotes((prev) => prev.filter((x) => x.id !== id)); setCompleteMessage('') } catch (e) { console.error(e) }
   }
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'var(--quote-grid)', gap: 16 }}>
       <div style={card}>
         <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-primary)', marginBottom: 4 }}>Cargar presupuesto</div>
-        <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 4 }}>Podés agregar múltiples presupuestos por ítem</div>
+        <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 4 }}>Al guardar, pasa automáticamente al siguiente ítem pendiente</div>
         <label style={lbl}>Ítem</label>
-        <select value={form.itemId} onChange={(e) => setForm((f) => ({ ...f, itemId: e.target.value }))} style={{ width: '100%' }}>
+        <select value={form.itemId} onChange={(e) => { setCompleteMessage(''); setForm((f) => ({ ...f, itemId: e.target.value })) }} style={{ width: '100%' }}>
           <option value="">— Seleccioná un ítem —</option>
           {items.map((it) => { const c = quotesForItem(it.id).length; return <option key={it.id} value={it.id}>{it.item}{c > 0 ? ` (${c} cargado${c > 1 ? 's' : ''})` : ''}</option> })}
         </select>
@@ -238,9 +256,13 @@ function StepQuotes({ items, quotes, setQuotes }) {
         <label style={lbl}>Negocio o link de compra</label>
         <input type="text" placeholder="Ej: Ferretería El Sol o https://..." value={form.source} onChange={(e) => setForm((f) => ({ ...f, source: e.target.value }))} style={inputStyle} />
         {formError && <div style={{ marginTop: 10, fontSize: 13, padding: '6px 10px', background: 'var(--bg-danger)', color: 'var(--text-danger)', borderRadius: 'var(--radius-md)' }}>{formError}</div>}
-        <button onClick={handleSubmit} disabled={saving} style={{ ...btnSolid('success'), width: '100%', justifyContent: 'center', marginTop: 16 }}>
-          {saving ? <Spinner text="Guardando..." /> : <><i className="ti ti-device-floppy" /> Guardar presupuesto</>}
-        </button>
+        {completeMessage && <div style={{ marginTop: 10, fontSize: 13, padding: '8px 10px', background: 'var(--bg-success)', color: 'var(--text-success)', borderRadius: 'var(--radius-md)', display: 'flex', alignItems: 'center', gap: 6 }}><i className="ti ti-circle-check" /> {completeMessage}</div>}
+        <div className="mobile-actions" style={{ display: 'flex', gap: 8, marginTop: 16 }}>
+          <button onClick={handleSubmit} disabled={saving || !form.itemId} style={{ ...btnSolid('success'), flex: 1, justifyContent: 'center' }}>
+            {saving ? <Spinner text="Guardando..." /> : <><i className="ti ti-device-floppy" /> Guardar presupuesto</>}
+          </button>
+          {completeMessage && <button onClick={onFinishQuotes} style={{ fontSize: 13, padding: '8px 12px', background: 'var(--bg-info)', color: 'var(--text-info)', border: '0.5px solid var(--border-info)', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}><i className="ti ti-layout-grid" /> Ver</button>}
+        </div>
       </div>
       <div style={card}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
@@ -276,6 +298,9 @@ function StepQuotes({ items, quotes, setQuotes }) {
 function ViewResumen({ items, quotes, setQuotes, onGoToStep }) {
   const [filterItemId, setFilterItemId] = useState('todos')
   const [sortDir, setSortDir] = useState('asc')
+  const [editingQuoteId, setEditingQuoteId] = useState(null)
+  const [editQuoteForm, setEditQuoteForm] = useState({ itemId: '', desc: '', price: '', source: '' })
+  const [savingQuote, setSavingQuote] = useState(false)
 
   const getItem = (id) => items.find((it) => it.id === id)
   const itemsWithQuotes = items.filter((it) => quotes.some((q) => q.itemId === it.id))
@@ -289,12 +314,29 @@ function ViewResumen({ items, quotes, setQuotes, onGoToStep }) {
     try { await deleteQuote(id); setQuotes((prev) => prev.filter((x) => x.id !== id)) } catch (e) { console.error(e) }
   }
 
+  const startEditQuote = (q) => {
+    setEditingQuoteId(q.id)
+    setEditQuoteForm({ itemId: q.itemId || '', desc: q.desc || '', price: q.price || '', source: q.source || '' })
+  }
+
+  const saveEditQuote = async (id) => {
+    if (!editQuoteForm.itemId || !editQuoteForm.price) return
+    setSavingQuote(true)
+    try {
+      const updated = { id, ...editQuoteForm }
+      await updateQuote(updated)
+      setQuotes((prev) => prev.map((q) => q.id === id ? { ...q, ...updated } : q))
+      setEditingQuoteId(null)
+    } catch (e) { console.error(e) }
+    finally { setSavingQuote(false) }
+  }
+
   return (
     <div>
       <div style={card}>
         <div className="mobile-stack" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 14 }}>
           <div><div style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-primary)' }}>Ítems a presupuestar</div><div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 2 }}>{items.length} ítems · {itemsWithQuotes.length} con presupuesto · {itemsSinQuotes.length} pendientes</div></div>
-          <button onClick={() => onGoToStep(2)} style={{ fontSize: 12, padding: '5px 12px', background: 'var(--bg-secondary)', color: 'var(--text-secondary)', border: '0.5px solid var(--border)', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}><i className="ti ti-edit" /> Editar ítems</button>
+          <button onClick={() => onGoToStep(3)} style={{ fontSize: 12, padding: '5px 12px', background: 'var(--bg-info)', color: 'var(--text-info)', border: '0.5px solid var(--border-info)', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}><i className="ti ti-plus" /> Cargar nuevo presupuesto</button>
         </div>
         {items.length === 0
           ? <div style={{ padding: 20, textAlign: 'center', color: 'var(--text-tertiary)', fontSize: 13, background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)' }}>No hay ítems cargados aún. <span style={{ color: 'var(--text-info)', cursor: 'pointer' }} onClick={() => onGoToStep(1)}>Subí un PDF</span> para empezar.</div>
@@ -329,14 +371,39 @@ function ViewResumen({ items, quotes, setQuotes, onGoToStep }) {
               const it = getItem(q.itemId)
               const allForItem = quotes.filter((x) => x.itemId === q.itemId).sort((a, b) => Number(a.price) - Number(b.price))
               const isCheapest = allForItem[0]?.id === q.id && allForItem.length > 1
+              const isEditing = editingQuoteId === q.id
               return (
                 <div key={q.id} style={{ padding: '12px 14px', border: `0.5px solid ${isCheapest ? 'var(--border-success)' : 'var(--border)'}`, borderRadius: 'var(--radius-md)', background: isCheapest ? 'var(--bg-success)' : 'var(--bg-primary)', position: 'relative' }}>
-                  {isCheapest && <span style={{ position: 'absolute', top: -1, right: 10, fontSize: 10, background: 'var(--text-success)', color: 'white', padding: '1px 6px', borderRadius: '0 0 6px 6px', fontWeight: 500 }}>MÁS BARATO</span>}
-                  <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginBottom: 4 }}>{it?.item}{it?.descripcion ? ` · ${it.descripcion}` : ''}</div>
-                  <div style={{ fontSize: 20, fontWeight: 600, color: 'var(--text-success)', marginBottom: 4 }}>${Number(q.price).toLocaleString('es-AR')}</div>
-                  {q.desc && <div style={{ fontSize: 13, color: 'var(--text-primary)', marginBottom: 4 }}>{q.desc}</div>}
-                  {q.source && <div style={{ fontSize: 12, color: 'var(--text-tertiary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}><i className="ti ti-building-store" style={{ fontSize: 11 }} /> {q.source}</div>}
-                  <button onClick={() => handleDeleteQuote(q.id)} style={{ position: 'absolute', top: 8, right: 8, background: 'none', border: 'none', color: 'var(--text-tertiary)', cursor: 'pointer', fontSize: 13 }}><i className="ti ti-x" /></button>
+                  {isCheapest && !isEditing && <span style={{ position: 'absolute', top: -1, right: 10, fontSize: 10, background: 'var(--text-success)', color: 'white', padding: '1px 6px', borderRadius: '0 0 6px 6px', fontWeight: 500 }}>MÁS BARATO</span>}
+                  {isEditing ? (
+                    <div>
+                      <label style={{ ...lbl, marginTop: 0 }}>Ítem</label>
+                      <select value={editQuoteForm.itemId} onChange={(e) => setEditQuoteForm((f) => ({ ...f, itemId: e.target.value }))} style={{ width: '100%' }}>
+                        {items.map((it) => <option key={it.id} value={it.id}>{it.item}</option>)}
+                      </select>
+                      <label style={lbl}>Descripción</label>
+                      <input value={editQuoteForm.desc} onChange={(e) => setEditQuoteForm((f) => ({ ...f, desc: e.target.value }))} style={inputStyle} />
+                      <label style={lbl}>Precio</label>
+                      <input type="number" min="0" value={editQuoteForm.price} onChange={(e) => setEditQuoteForm((f) => ({ ...f, price: e.target.value }))} style={inputStyle} />
+                      <label style={lbl}>Negocio o link</label>
+                      <input value={editQuoteForm.source} onChange={(e) => setEditQuoteForm((f) => ({ ...f, source: e.target.value }))} style={inputStyle} />
+                      <div className="mobile-actions" style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
+                        <button onClick={() => setEditingQuoteId(null)} style={{ fontSize: 12, padding: '5px 12px', background: 'var(--bg-secondary)', color: 'var(--text-tertiary)', border: '0.5px solid var(--border)', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}>Cancelar</button>
+                        <button onClick={() => saveEditQuote(q.id)} disabled={savingQuote} style={{ fontSize: 12, padding: '5px 12px', background: 'var(--bg-success)', color: 'var(--text-success)', border: '0.5px solid var(--border-success)', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}>{savingQuote ? 'Guardando...' : <><i className="ti ti-check" /> Guardar</>}</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginBottom: 4 }}>{it?.item}{it?.descripcion ? ` · ${it.descripcion}` : ''}</div>
+                      <div style={{ fontSize: 20, fontWeight: 600, color: 'var(--text-success)', marginBottom: 4 }}>${Number(q.price).toLocaleString('es-AR')}</div>
+                      {q.desc && <div style={{ fontSize: 13, color: 'var(--text-primary)', marginBottom: 4 }}>{q.desc}</div>}
+                      {q.source && <div style={{ fontSize: 12, color: 'var(--text-tertiary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}><i className="ti ti-building-store" style={{ fontSize: 11 }} /> {q.source}</div>}
+                      <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
+                        <button onClick={() => startEditQuote(q)} style={{ fontSize: 12, padding: '4px 10px', background: 'var(--bg-info)', color: 'var(--text-info)', border: '0.5px solid var(--border-info)', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}><i className="ti ti-edit" /> Editar</button>
+                        <button onClick={() => handleDeleteQuote(q.id)} style={{ fontSize: 12, padding: '4px 10px', background: 'var(--bg-danger)', color: 'var(--text-danger)', border: '0.5px solid var(--border-danger)', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}><i className="ti ti-trash" /> Borrar</button>
+                      </div>
+                    </>
+                  )}
                 </div>
               )
             })}
@@ -544,7 +611,7 @@ export default function App() {
               } catch (e) { setItems(detected); setStep(2) }
             }} />}
             {step === 2 && <StepItems items={items} setItems={setItems} onConfirm={() => setStep(3)} />}
-            {step === 3 && <StepQuotes items={items} quotes={quotes} setQuotes={setQuotes} />}
+            {step === 3 && <StepQuotes items={items} quotes={quotes} setQuotes={setQuotes} onFinishQuotes={() => setView('resumen')} />}
           </>
         )}
         {view === 'resumen' && <ViewResumen items={items} quotes={quotes} setQuotes={setQuotes} onGoToStep={goToStep} />}

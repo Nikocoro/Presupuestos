@@ -19,6 +19,14 @@ export const handler = async (event) => {
       return created({ ...quote, _id: result.insertedId })
     }
 
+
+    if (event.httpMethod === 'PUT') {
+      const { id, ...fields } = JSON.parse(event.body || '{}')
+      if (!id) return err(400, 'Falta el id del presupuesto')
+      await col.updateOne({ id }, { $set: { ...fields, updatedAt: new Date() } })
+      return ok({ updated: true })
+    }
+
     if (event.httpMethod === 'DELETE') {
       const id = event.queryStringParameters?.id
       if (!id) return err(400, 'Falta el parámetro id')
