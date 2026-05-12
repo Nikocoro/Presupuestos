@@ -10,7 +10,11 @@ export default function StepItems({ items, setItems, onConfirm }) {
     setItems((prev) => prev.map((it) => it.id === id ? { ...it, item: editVal.trim() } : it))
     setEditingId(null)
   }
-  const deleteItem = (id) => setItems((prev) => prev.filter((it) => it.id !== id))
+  const deleteItem = (id) => {
+    const item = items.find((it) => it.id === id)
+    if (!window.confirm(`¿Seguro que querés eliminar el ítem${item?.item ? ` \"${item.item}\"` : ''}? Esta acción no se puede deshacer.`)) return
+    setItems((prev) => prev.filter((it) => it.id !== id))
+  }
   const addItem = () => {
     const id = `item-${Date.now()}`
     setItems((prev) => [...prev, { id, item: '', contexto: '' }])

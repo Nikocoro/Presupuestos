@@ -46,6 +46,8 @@ const STEPS = [
 ]
 const PROFESIONES_LISTA = ['Gasista', 'Plomero', 'Electricista', 'Albañil', 'Carpintero', 'Pintor', 'Cerrajero', 'Techista', 'Herrero', 'Jardinero']
 
+const confirmDelete = (message) => window.confirm(message)
+
 // ── Loading overlay ──────────────────────────────────────────────────────────
 function Spinner({ text }) {
   return (
@@ -132,6 +134,9 @@ function StepItems({ items, setItems, setAllItems, onConfirm }) {
   }
 
   const handleDelete = async (id) => {
+    const item = items.find((it) => it.id === id)
+    if (!confirmDelete(`¿Seguro que querés eliminar el ítem${item?.item ? ` \"${item.item}\"` : ''}? Esta acción no se puede deshacer.`)) return
+
     try {
       await deleteItem(id)
       setItems((prev) => prev.filter((it) => it.id !== id))
@@ -243,6 +248,8 @@ function StepQuotes({ items, quotes, setQuotes, onFinishQuotes }) {
   }
 
   const handleDelete = async (id) => {
+    if (!confirmDelete('¿Seguro que querés borrar este presupuesto? Esta acción no se puede deshacer.')) return
+
     try { await deleteQuote(id); setQuotes((prev) => prev.filter((x) => x.id !== id)); setCompleteMessage('') } catch (e) { console.error(e) }
   }
 
@@ -319,11 +326,17 @@ function ViewResumen({ items, setItems, quotes, setQuotes, onGoToStep }) {
     .sort((a, b) => sortDir === 'asc' ? Number(a.price) - Number(b.price) : Number(b.price) - Number(a.price))
 
   const handleDeleteQuote = async (id) => {
+    if (!confirmDelete('¿Seguro que querés borrar este presupuesto? Esta acción no se puede deshacer.')) return
+
     try { await deleteQuote(id); setQuotes((prev) => prev.filter((x) => x.id !== id)) } catch (e) { console.error(e) }
   }
 
   const handleDeleteItem = async (itemId) => {
+    const item = items.find((it) => it.id === itemId)
     const relatedQuotes = quotes.filter((q) => q.itemId === itemId)
+    const extra = relatedQuotes.length > 0 ? ` También se borrarán ${relatedQuotes.length} presupuesto${relatedQuotes.length > 1 ? 's' : ''} asociado${relatedQuotes.length > 1 ? 's' : ''}.` : ''
+    if (!confirmDelete(`¿Seguro que querés eliminar el ítem${item?.item ? ` \"${item.item}\"` : ''}?${extra} Esta acción no se puede deshacer.`)) return
+
     try {
       await deleteItem(itemId)
       await Promise.all(relatedQuotes.map((q) => deleteQuote(q.id)))
@@ -463,6 +476,9 @@ function ViewProfesionales({ profesionales, setProfesionales }) {
   }
 
   const handleDelete = async (id) => {
+    const profesional = profesionales.find((p) => p.id === id)
+    if (!confirmDelete(`¿Seguro que querés eliminar${profesional?.nombre ? ` a \"${profesional.nombre}\"` : ' este profesional'}? Esta acción no se puede deshacer.`)) return
+
     try { await deleteProfesional(id); setProfesionales((prev) => prev.filter((x) => x.id !== id)) } catch (e) { console.error(e) }
   }
 
