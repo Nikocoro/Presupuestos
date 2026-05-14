@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import * as pdfjsLib from 'pdfjs-dist'
 import {
+  loadSubcomisiones,
   loadItems, addItem, updateItem, deleteItem,
   loadQuotes, addQuote, updateQuote, deleteQuote,
   loadProfesionales, addProfesional, deleteProfesional,
@@ -101,7 +102,7 @@ function StepUpload({ onItemsDetected, onManualStart }) {
 }
 
 // ── Step 2 ───────────────────────────────────────────────────────────────────
-function StepItems({ items, setItems, setAllItems, onConfirm }) {
+function StepItems({ items, setItems, setAllItems, subcoId, onConfirm }) {
   const [editingId, setEditingId] = useState(null)
   const [editForm, setEditForm] = useState({ item: '', descripcion: '' })
   const [saving, setSaving] = useState(false)
@@ -112,7 +113,7 @@ function StepItems({ items, setItems, setAllItems, onConfirm }) {
     if (!editForm.item.trim()) return
     setSaving(true)
     try {
-      const updated = { id, item: editForm.item.trim(), descripcion: editForm.descripcion.trim() }
+      const updated = { id, subcoId, item: editForm.item.trim(), descripcion: editForm.descripcion.trim() }
       await updateItem(updated)
       setItems((prev) => prev.map((it) => it.id === id ? { ...it, ...updated } : it))
       setAllItems((prev) => prev.map((it) => it.id === id ? { ...it, ...updated } : it))
@@ -122,7 +123,7 @@ function StepItems({ items, setItems, setAllItems, onConfirm }) {
   }
 
   const handleAdd = async () => {
-    const newItem = { id: `item-${Date.now()}`, item: '', contexto: '', descripcion: '' }
+    const newItem = { id: `item-${Date.now()}`, subcoId, item: '', contexto: '', descripcion: '' }
     setSaving(true)
     try {
       const saved = await addItem(newItem)
@@ -138,7 +139,7 @@ function StepItems({ items, setItems, setAllItems, onConfirm }) {
     if (!confirmDelete(`¿Seguro que querés eliminar el ítem${item?.item ? ` \"${item.item}\"` : ''}? Esta acción no se puede deshacer.`)) return
 
     try {
-      await deleteItem(id)
+      await deleteItem(id, subcoId)
       setItems((prev) => prev.filter((it) => it.id !== id))
       setAllItems((prev) => prev.filter((it) => it.id !== id))
     } catch (e) { console.error(e) }
@@ -203,7 +204,7 @@ function StepItems({ items, setItems, setAllItems, onConfirm }) {
 }
 
 // ── Step 3 ───────────────────────────────────────────────────────────────────
-function StepQuotes({ items, quotes, setQuotes, onFinishQuotes }) {
+function StepQuotes({ items, quotes, setQuotes, subcoId, onFinishQuotes }) {
   const empty = { itemId: '', desc: '', price: '', source: '' }
   const [form, setForm] = useState(empty)
   const [formError, setFormError] = useState('')
@@ -231,7 +232,7 @@ function StepQuotes({ items, quotes, setQuotes, onFinishQuotes }) {
     if (!form.price) { setFormError('Ingresá el precio.'); return }
     setFormError(''); setCompleteMessage(''); setSaving(true)
     try {
-      const quote = { id: `q-${Date.now()}`, ...form }
+      const quote = { id: `q-${Date.now()}`, subcoId, ...form }
       const saved = await addQuote(quote)
       const nextQuotes = [...quotes, saved]
       setQuotes(nextQuotes)
@@ -250,7 +251,7 @@ function StepQuotes({ items, quotes, setQuotes, onFinishQuotes }) {
   const handleDelete = async (id) => {
     if (!confirmDelete('¿Seguro que querés borrar este presupuesto? Esta acción no se puede deshacer.')) return
 
-    try { await deleteQuote(id); setQuotes((prev) => prev.filter((x) => x.id !== id)); setCompleteMessage('') } catch (e) { console.error(e) }
+    try { await deleteQuote(id, subcoId); setQuotes((prev) => prev.filter((x) => x.id !== id)); setCompleteMessage('') } catch (e) { console.error(e) }
   }
 
   return (
@@ -261,8 +262,9 @@ function StepQuotes({ items, quotes, setQuotes, onFinishQuotes }) {
         <label style={lbl}>Ítem</label>
         <select value={form.itemId} onChange={(e) => { setCompleteMessage(''); setForm((f) => ({ ...f, itemId: e.target.value })) }} style={{ width: '100%' }}>
           <option value="">— Seleccioná un ítem —</option>
-          {items.map((it) => { const c = quotesForItem(it.id).length; return <option key={it.id} value={it.id}>{it.item}{c > 0 ? ` (${c} cargado${c > 1 ? 's' : ''})` : ''}</option> })}
+          {itemsSinCotizar.map((it) => <option key={it.id} value={it.id}>{it.item}</option>)}
         </select>
+        {itemsSinCotizar.length === 0 && <div style={{ marginTop: 8, padding: '8px 10px', background: 'var(--bg-success)', color: 'var(--text-success)', borderRadius: 'var(--radius-md)', fontSize: 12 }}><i className="ti ti-circle-check" /> No quedan ítems pendientes de presupuesto en esta subcomisión.</div>}
         {form.itemId && getItem(form.itemId)?.descripcion && <div style={{ marginTop: 6, padding: '6px 10px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)', fontSize: 12, color: 'var(--text-secondary)' }}><i className="ti ti-notes" style={{ fontSize: 11 }} /> {getItem(form.itemId).descripcion}</div>}
         <label style={lbl}>Descripción del producto / oferta</label>
         <input type="text" placeholder="Ej: cemento portland 50kg marca Loma Negra" value={form.desc} onChange={(e) => setForm((f) => ({ ...f, desc: e.target.value }))} style={inputStyle} />
@@ -310,7 +312,7 @@ function StepQuotes({ items, quotes, setQuotes, onFinishQuotes }) {
 }
 
 // ── Vista General ─────────────────────────────────────────────────────────────
-function ViewResumen({ items, setItems, quotes, setQuotes, onGoToStep }) {
+function ViewResumen({ items, setItems, quotes, setQuotes, subcoId, subcoName, onGoToStep }) {
   const [filterItemId, setFilterItemId] = useState('todos')
   const [sortDir, setSortDir] = useState('asc')
   const [editingQuoteId, setEditingQuoteId] = useState(null)
@@ -328,7 +330,7 @@ function ViewResumen({ items, setItems, quotes, setQuotes, onGoToStep }) {
   const handleDeleteQuote = async (id) => {
     if (!confirmDelete('¿Seguro que querés borrar este presupuesto? Esta acción no se puede deshacer.')) return
 
-    try { await deleteQuote(id); setQuotes((prev) => prev.filter((x) => x.id !== id)) } catch (e) { console.error(e) }
+    try { await deleteQuote(id, subcoId); setQuotes((prev) => prev.filter((x) => x.id !== id)) } catch (e) { console.error(e) }
   }
 
   const handleDeleteItem = async (itemId) => {
@@ -338,8 +340,8 @@ function ViewResumen({ items, setItems, quotes, setQuotes, onGoToStep }) {
     if (!confirmDelete(`¿Seguro que querés eliminar el ítem${item?.item ? ` \"${item.item}\"` : ''}?${extra} Esta acción no se puede deshacer.`)) return
 
     try {
-      await deleteItem(itemId)
-      await Promise.all(relatedQuotes.map((q) => deleteQuote(q.id)))
+      await deleteItem(itemId, subcoId)
+      await Promise.all(relatedQuotes.map((q) => deleteQuote(q.id, subcoId)))
       setItems((prev) => prev.filter((it) => it.id !== itemId))
       setQuotes((prev) => prev.filter((q) => q.itemId !== itemId))
       if (filterItemId === itemId) setFilterItemId('todos')
@@ -355,7 +357,7 @@ function ViewResumen({ items, setItems, quotes, setQuotes, onGoToStep }) {
     if (!editQuoteForm.itemId || !editQuoteForm.price) return
     setSavingQuote(true)
     try {
-      const updated = { id, ...editQuoteForm }
+      const updated = { id, subcoId, ...editQuoteForm }
       await updateQuote(updated)
       setQuotes((prev) => prev.map((q) => q.id === id ? { ...q, ...updated } : q))
       setEditingQuoteId(null)
@@ -367,7 +369,7 @@ function ViewResumen({ items, setItems, quotes, setQuotes, onGoToStep }) {
     <div>
       <div style={card}>
         <div className="mobile-stack" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 14 }}>
-          <div><div style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-primary)' }}>Ítems a presupuestar</div><div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 2 }}>{items.length} ítems · {itemsWithQuotes.length} con presupuesto · {itemsSinQuotes.length} pendientes</div></div>
+          <div><div style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-primary)' }}>Ítems a presupuestar</div>{subcoName && <div style={{ fontSize: 12, color: 'var(--text-info)', marginTop: 2 }}><i className="ti ti-users-group" /> {subcoName}</div>}<div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 2 }}>{items.length} ítems · {itemsWithQuotes.length} con presupuesto · {itemsSinQuotes.length} pendientes</div></div>
           <div className="mobile-actions" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}><button onClick={() => onGoToStep(1)} style={{ fontSize: 12, padding: '5px 12px', background: 'var(--bg-secondary)', color: 'var(--text-secondary)', border: '0.5px solid var(--border)', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}><i className="ti ti-file-upload" /> Nueva carga</button><button onClick={() => onGoToStep(3)} style={{ fontSize: 12, padding: '5px 12px', background: 'var(--bg-info)', color: 'var(--text-info)', border: '0.5px solid var(--border-info)', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}><i className="ti ti-plus" /> Cargar presupuesto</button></div>
         </div>
         {items.length === 0
@@ -550,8 +552,35 @@ function ViewProfesionales({ profesionales, setProfesionales }) {
   )
 }
 
+
+function SubcoSelector({ subcomisiones, onSelect }) {
+  return (
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--page-padding)' }}>
+      <div style={{ ...card, maxWidth: 720, width: '100%', padding: '24px var(--card-padding)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+          <i className="ti ti-users-group" style={{ fontSize: 26, color: 'var(--text-info)' }} />
+          <div>
+            <div style={{ fontSize: 20, fontWeight: 600, color: 'var(--text-primary)' }}>Elegí una subcomisión</div>
+            <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 2 }}>Cada subco tiene sus propios ítems y presupuestos independientes.</div>
+          </div>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'var(--summary-items-grid)', gap: 10, marginTop: 18 }}>
+          {subcomisiones.map((subco) => (
+            <button key={subco.id} onClick={() => onSelect(subco)} style={{ textAlign: 'left', padding: 16, background: 'var(--bg-secondary)', border: '0.5px solid var(--border)', borderRadius: 'var(--radius-lg)', cursor: 'pointer', color: 'var(--text-primary)' }}>
+              <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>{subco.nombre}</div>
+              <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>Abrir tablero</div>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Root ─────────────────────────────────────────────────────────────────────
 export default function App() {
+  const [selectedSubco, setSelectedSubco] = useState(null)
+  const [subcomisiones, setSubcomisiones] = useState([])
   const [view, setView] = useState('workflow')
   const [step, setStep] = useState(1)
   const [items, setItems] = useState([])
@@ -559,14 +588,15 @@ export default function App() {
   const [quotes, setQuotes] = useState([])
   const [profesionales, setProfesionales] = useState([])
   const [initializing, setInitializing] = useState(true)
+  const [loadingSubcoData, setLoadingSubcoData] = useState(false)
   const [dbError, setDbError] = useState('')
 
   useEffect(() => {
     ;(async () => {
       try {
-        const [i, q, p] = await Promise.all([loadItems(), loadQuotes(), loadProfesionales()])
-        setItems(i); setQuotes(q); setProfesionales(p)
-        if (i.length > 0) { setView('resumen'); setStep(1) }
+        const [subcos, p] = await Promise.all([loadSubcomisiones(), loadProfesionales()])
+        setSubcomisiones(subcos)
+        setProfesionales(p)
       } catch (e) {
         setDbError('No se pudo conectar a la base de datos. Usando datos locales.')
         console.error(e)
@@ -575,6 +605,37 @@ export default function App() {
       }
     })()
   }, [])
+
+  const selectSubco = async (subco) => {
+    setSelectedSubco(subco)
+    setDbError('')
+    setLoadingSubcoData(true)
+    setView('workflow')
+    setStep(1)
+    setDraftItems([])
+    try {
+      const [i, q] = await Promise.all([loadItems(subco.id), loadQuotes(subco.id)])
+      setItems(i)
+      setQuotes(q)
+      if (i.length > 0) setView('resumen')
+    } catch (e) {
+      setItems([])
+      setQuotes([])
+      setDbError('No se pudieron cargar los datos de esta subcomisión.')
+      console.error(e)
+    } finally {
+      setLoadingSubcoData(false)
+    }
+  }
+
+  const changeSubco = () => {
+    setSelectedSubco(null)
+    setItems([])
+    setQuotes([])
+    setDraftItems([])
+    setView('workflow')
+    setStep(1)
+  }
 
   const goToStep = (s) => {
     if (s === 1) setDraftItems([])
@@ -602,12 +663,17 @@ export default function App() {
     </div>
   )
 
+  if (!selectedSubco) return <SubcoSelector subcomisiones={subcomisiones} onSelect={selectSubco} />
+
   return (
     <div style={{ fontFamily: 'inherit', minHeight: '100vh' }}>
       <div style={{ background: 'var(--bg-primary)', borderBottom: '0.5px solid var(--border)', padding: '12px var(--page-padding)', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
         <i className="ti ti-receipt-2" style={{ fontSize: 22, color: 'var(--text-info)' }} />
         <span style={{ fontSize: 16, fontWeight: 500, color: 'var(--text-primary)', cursor: 'pointer' }} onClick={() => setView('workflow')}>Cotizador</span>
-        <span style={{ fontSize: 11, background: 'var(--bg-info)', color: 'var(--text-info)', padding: '2px 8px', borderRadius: 'var(--radius-md)' }}>Beta</span>
+        <span style={{ fontSize: 11, background: 'var(--bg-info)', color: 'var(--text-info)', padding: '2px 8px', borderRadius: 'var(--radius-md)' }}>{selectedSubco.nombre}</span>
+        <button onClick={changeSubco} style={{ fontSize: 11, padding: '3px 8px', background: 'var(--bg-secondary)', color: 'var(--text-secondary)', border: '0.5px solid var(--border)', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}>
+          <i className="ti ti-switch-horizontal" /> Cambiar subco
+        </button>
         <div style={{ marginLeft: 'var(--top-nav-margin-left)', width: 'var(--top-nav-width)', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           {navBtn('resumen', 'ti-layout-grid', 'Presupuestos', quotes.length)}
           {navBtn('profesionales', 'ti-users', 'Profesionales', profesionales.length)}
@@ -617,6 +683,12 @@ export default function App() {
       {dbError && (
         <div style={{ background: 'var(--bg-warning)', color: 'var(--text-warning)', padding: '8px var(--page-padding)', fontSize: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
           <i className="ti ti-alert-triangle" /> {dbError}
+        </div>
+      )}
+
+      {loadingSubcoData && (
+        <div style={{ background: 'var(--bg-secondary)', color: 'var(--text-secondary)', padding: '8px var(--page-padding)', fontSize: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <i className="ti ti-loader-2 spinning" /> Cargando datos de {selectedSubco.nombre}...
         </div>
       )}
 
@@ -652,23 +724,24 @@ export default function App() {
             {step === 1 && <StepUpload
               onManualStart={() => { setDraftItems([]); setStep(2) }}
               onItemsDetected={async (detected) => {
+                const withSubco = detected.map((it) => ({ ...it, subcoId: selectedSubco.id }))
                 try {
-                  const saved = await Promise.all(detected.map((it) => addItem(it)))
+                  const saved = await Promise.all(withSubco.map((it) => addItem(it)))
                   setItems((prev) => [...prev, ...saved])
                   setDraftItems(saved)
                   setStep(2)
                 } catch (e) {
-                  setItems((prev) => [...prev, ...detected])
-                  setDraftItems(detected)
+                  setItems((prev) => [...prev, ...withSubco])
+                  setDraftItems(withSubco)
                   setStep(2)
                 }
               }}
             />}
-            {step === 2 && <StepItems items={draftItems} setItems={setDraftItems} setAllItems={setItems} onConfirm={() => { setDraftItems([]); setStep(1); setView('resumen') }} />}
-            {step === 3 && <StepQuotes items={items} quotes={quotes} setQuotes={setQuotes} onFinishQuotes={() => setView('resumen')} />}
+            {step === 2 && <StepItems items={draftItems} setItems={setDraftItems} setAllItems={setItems} subcoId={selectedSubco.id} onConfirm={() => { setDraftItems([]); setStep(1); setView('resumen') }} />}
+            {step === 3 && <StepQuotes items={items} quotes={quotes} setQuotes={setQuotes} subcoId={selectedSubco.id} onFinishQuotes={() => setView('resumen')} />}
           </>
         )}
-        {view === 'resumen' && <ViewResumen items={items} setItems={setItems} quotes={quotes} setQuotes={setQuotes} onGoToStep={goToStep} />}
+        {view === 'resumen' && <ViewResumen items={items} setItems={setItems} quotes={quotes} setQuotes={setQuotes} subcoId={selectedSubco.id} subcoName={selectedSubco.nombre} onGoToStep={goToStep} />}
         {view === 'profesionales' && <ViewProfesionales profesionales={profesionales} setProfesionales={setProfesionales} />}
       </div>
     </div>

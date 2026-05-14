@@ -7,30 +7,35 @@ export const handler = async (event) => {
   try {
     const db = await getDb()
     const col = db.collection('quotes')
+    const subcoId = event.queryStringParameters?.subcoId
 
     if (event.httpMethod === 'GET') {
-      const quotes = await col.find({}).sort({ createdAt: 1 }).toArray()
+      if (!subcoId) return err(400, 'Falta el parámetro subcoId')
+      const quotes = await col.find({ subcoId }).sort({ createdAt: 1 }).toArray()
       return ok(quotes)
     }
 
     if (event.httpMethod === 'POST') {
-      const quote = { ...JSON.parse(event.body), createdAt: new Date() }
+      const body = JSON.parse(event.body || '{}')
+      if (!body.subcoId) return err(400, 'Falta el campo subcoId')
+      const quote = { ...body, createdAt: new Date() }
       const result = await col.insertOne(quote)
       return created({ ...quote, _id: result.insertedId })
     }
 
-
     if (event.httpMethod === 'PUT') {
       const { id, ...fields } = JSON.parse(event.body || '{}')
       if (!id) return err(400, 'Falta el id del presupuesto')
-      await col.updateOne({ id }, { $set: { ...fields, updatedAt: new Date() } })
+      const filter = fields.subcoId ? { id, subcoId: fields.subcoId } : { id }
+      await col.updateOne(filter, { $set: { ...fields, updatedAt: new Date() } })
       return ok({ updated: true })
     }
 
     if (event.httpMethod === 'DELETE') {
       const id = event.queryStringParameters?.id
       if (!id) return err(400, 'Falta el parámetro id')
-      await col.deleteOne({ id })
+      const filter = subcoId ? { id, subcoId } : { id }
+      await col.deleteOne(filter)
       return ok({ deleted: true })
     }
 
